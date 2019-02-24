@@ -1,0 +1,170 @@
+/*
+ * Copyright 1993-2006 NVIDIA Corporation.  All rights reserved.
+ *
+ * NOTICE TO USER:
+ *
+ * This source code is subject to NVIDIA ownership rights under U.S. and
+ * international Copyright laws.
+ *
+ * This software and the information contained herein is PROPRIETARY and
+ * CONFIDENTIAL to NVIDIA and is being provided under the terms and
+ * conditions of a Non-Disclosure Agreement.  Any reproduction or
+ * disclosure to any third party without the express written consent of
+ * NVIDIA is prohibited.
+ *
+ * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
+ * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
+ * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
+ * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
+ * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
+ * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+ * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+ * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE
+ * OR PERFORMANCE OF THIS SOURCE CODE.
+ *
+ * U.S. Government End Users.  This source code is a "commercial item" as
+ * that term is defined at 48 C.F.R. 2.101 (OCT 1995), consisting  of
+ * "commercial computer software" and "commercial computer software
+ * documentation" as such terms are used in 48 C.F.R. 12.212 (SEPT 1995)
+ * and is provided to the U.S. Government only as a commercial end item.
+ * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
+ * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
+ * source code with only those rights set forth herein.
+ */
+
+#ifdef _WIN32
+#  define NOMINMAX
+#endif
+
+// includes, system
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+#include <float.h>
+
+// For the CUDA runtime routines (prefixed with "cuda_")
+#include <cuda_runtime.h>
+
+
+// includes, kernels
+#include "vector_reduction_kernel.cu"
+
+// For simplicity, just to get the idea in this MP, we're fixing the problem size to 512 elements.
+#define NUM_ELEMENTS 512
+#define NUM_ELEMENTS_LESS 3
+#define NUM_ELEMENTS_MORE 2222
+////////////////////////////////////////////////////////////////////////////////
+// declaration, forward
+void runTest( int argc, char** argv);
+
+int ReadFile(float*, char* file_name);
+float computeOnDevice(float* h_data, int array_mem_size);
+
+extern "C"
+void computeGold( float* reference, float* idata, const unsigned int len);
+
+////////////////////////////////////////////////////////////////////////////////
+// Program main
+////////////////////////////////////////////////////////////////////////////////
+int
+main( int argc, char** argv)
+{
+    runTest(argc, argv);
+    return EXIT_SUCCESS;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//! Run naive scan test
+////////////////////////////////////////////////////////////////////////////////
+void runTest( int argc, char** argv)
+{
+    int num_elements;
+    //flags points the data over than 512
+    if(argc != 2){
+        fprintf(stderr,"need num_elements\n");
+        exit(1);
+    }
+    if((num_elements = atoi(argv[1])) == 0){
+        fprintf(stderr,"need a number\n");
+        exit(1);
+    }
+    const unsigned int array_mem_size = sizeof( float) * num_elements;
+
+    // allocate host memory to store the input data
+    float* h_data = (float*) malloc( array_mem_size);
+
+    for( unsigned int i = 0; i < num_elements; ++i)
+        h_data[i] = floorf(1000*(rand()/(float)RAND_MAX));
+    // compute reference solution
+    float reference = 0.0f;
+    computeGold(&reference , h_data, num_elements);
+
+    // **===-------- Modify the body of this function -----------===**
+    float result = computeOnDevice(h_data, num_elements);
+    // **===-----------------------------------------------------------===**
+
+
+    // We can use an epsilon of 0 since values are integral and in a range
+    // that can be exactly represented
+    float epsilon = 0.0f;
+    unsigned int result_regtest = (abs(result - reference) <= epsilon);
+    printf( "Test %s\n", (1 == result_regtest) ? "PASSED" : "FAILED");
+    printf( "device: %f  host: %f\n", result, reference);
+    // cleanup memory
+    free( h_data);
+}
+
+
+int ReadFile(float* M, char* file_name)
+{
+    printf("reading");
+    unsigned int elements_read = NUM_ELEMENTS;
+    FILE *file;
+    if((file = fopen(file_name,"r")) == NULL)
+        return 1;
+    else{
+        for(unsigned i = 0; i < elements_read; ++i)
+            fscanf(file, "%f", &M[i]);
+    }
+    return 0;
+}
+// **===----------------- Modify this function ---------------------===**
+// Take h_data from host, copies it to device, setup grid and thread
+// dimentions, excutes kernel function, and copy result of scan back
+// to h_data.
+// Note: float* h_data is both the input and the output of this function.
+float computeOnDevice(float* h_data, int num_elements)
+{
+    int block_size, grid_size, len;
+    block_size = 512;
+    float* d_data;
+    len = num_elements * sizeof(float);
+    cudaMalloc(&d_data, len);
+    cudaMemcpy(d_data, h_data, len, cudaMemcpyHostToDevice);
+    grid_size = (int)ceil((double)num_elements/(double)block_size);
+    if(num_elements <= 512) {
+        reduction_less<<<grid_size,block_size>>>(d_data, num_elements);
+        cudaMemcpy(h_data, d_data, sizeof(float), cudaMemcpyDeviceToHost);
+        return *h_data;
+    }else{
+        float *d_result;
+        cudaMalloc(&d_result, grid_size * sizeof(float));
+        reduction_more<<<grid_size,block_size>>>(d_data, num_elements, d_result);
+        cudaMemcpy(h_data, d_result, grid_size * sizeof(float), cudaMemcpyDeviceToHost);
+        for (int i = 1; i < grid_size; ++i)
+            h_data[0] += h_data[i];
+        return *h_data;
+    }
+    /* retrun *h_data; */
+}
+void computeGold( float* reference, float* idata, const unsigned int len)
+{
+    reference[0] = 0;
+    double total_sum = 0;
+    unsigned int i;
+    for( i = 0; i < len; ++i)
+        total_sum += idata[i];
+    *reference = total_sum;
+}
