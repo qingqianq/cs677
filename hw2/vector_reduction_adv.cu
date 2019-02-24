@@ -147,12 +147,15 @@ float computeOnDevice(float* h_data, int num_elements)
     if(num_elements <= 512) {
         reduction_less<<<grid_size,block_size>>>(d_data, num_elements);
         cudaMemcpy(h_data, d_data, sizeof(float), cudaMemcpyDeviceToHost);
+        cudaFree(d_data);
         return *h_data;
     }else{
         float *d_result;
         cudaMalloc(&d_result, grid_size * sizeof(float));
         reduction_more<<<grid_size,block_size>>>(d_data, num_elements, d_result);
         cudaMemcpy(h_data, d_result, grid_size * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaFree(d_result);
+        cudaFree(d_data);
         for (int i = 1; i < grid_size; ++i)
             h_data[0] += h_data[i];
         return *h_data;
