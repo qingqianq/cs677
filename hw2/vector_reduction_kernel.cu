@@ -64,7 +64,8 @@ __global__ void reduction_less(float *g_data, int n)
 {
     int tid = blockIdx.x*blockDim.x + threadIdx.x;
     __shared__ float partialSum[512];
-    partialSum[tid] = g_data[tid];
+    if(tid < n)
+        partialSum[tid] = g_data[tid];// here may be segfault problem if tid > the len of g_data
     __syncthreads();
     for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
         __syncthreads();
@@ -78,7 +79,8 @@ __global__ void reduction_more(float *g_data, int n, float *result){
     int tid = threadIdx.x;
     int index = blockIdx.x * blockDim.x * 2 + threadIdx.x;
     __shared__ float partialSum[512];
-    partialSum[tid] = g_data[index] + g_data[index + blockDim.x];
+    if(index < n)
+        partialSum[tid] = g_data[index] + g_data[index + blockDim.x]; // same problem
     __syncthreads();
     for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
         __syncthreads();
