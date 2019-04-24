@@ -197,19 +197,15 @@ void kmeans_gpu(params params, int *cluster_info){
       printf("\n");
       }
     */
-
-
-
-
-    dim3 dimBlock1d_16(BLOCKSIZE_16 * BLOCKSIZE_16);
-    dim3 dimBlock1d_32(BLOCKSIZE_32 * BLOCKSIZE_32);
-    dim3 dimGrid1d_16((params.obj_num + BLOCKSIZE_16 * BLOCKSIZE_16 - 1) / BLOCKSIZE_16 * BLOCKSIZE_16);
-    dim3 dimGrid1d_32((params.obj_num + BLOCKSIZE_32 * BLOCKSIZE_32 - 1) / BLOCKSIZE_32 * BLOCKSIZE_32);
-    dim3 dimBlock2d_16(BLOCKSIZE_16,BLOCKSIZE_16);
-    dim3 dimGrid2d_cluster((params.obj_dimension + BLOCKSIZE_16 - 1) / BLOCKSIZE_16, (params.cluster_num + BLOCKSIZE_16 -1) / BLOCKSIZE_16);
-    dim3 dimGrid2d_dimension_objNum((params.obj_dimension + BLOCKSIZE_16 - 1) / BLOCKSIZE_16, (params.obj_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16);
-    dim3 dimGrid2d_objCluster((params.cluster_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16, (params.obj_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16);
-    dim3 dimGrid2d_objNum_16(1, (params.obj_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16);
+    dim3 block1d_16(BLOCKSIZE_16 * BLOCKSIZE_16);
+    dim3 block1d_32(BLOCKSIZE_32 * BLOCKSIZE_32);
+    dim3 grid1d_16((params.obj_num + BLOCKSIZE_16 * BLOCKSIZE_16 - 1) / BLOCKSIZE_16 * BLOCKSIZE_16);
+    dim3 grid1d_32((params.obj_num + BLOCKSIZE_32 * BLOCKSIZE_32 - 1) / BLOCKSIZE_32 * BLOCKSIZE_32);
+    dim3 block2d_16(BLOCKSIZE_16,BLOCKSIZE_16);
+    dim3 grid2d_cluster((params.obj_dimension + BLOCKSIZE_16 - 1) / BLOCKSIZE_16, (params.cluster_num + BLOCKSIZE_16 -1) / BLOCKSIZE_16);
+    dim3 grid2d_dimension_obj((params.obj_dimension + BLOCKSIZE_16 - 1) / BLOCKSIZE_16, (params.obj_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16);
+    dim3 grid2d_cluster_obj((params.cluster_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16, (params.obj_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16);
+    dim3 grid2d_objNum_16(1, (params.obj_num + BLOCKSIZE_16 - 1) / BLOCKSIZE_16);
 
     cudaEvent_t start, stop;
     float time;
@@ -220,10 +216,13 @@ void kmeans_gpu(params params, int *cluster_info){
 
     cudaMemset(dev_center_data, 0, params.obj_dimension * params.cluster_num * sizeof(float));
     cudaMemset(dev_cluster_count, 0, params.cluster_num * sizeof(int));
-    cal_center_total<<<dimGrid2d_dimension_objNum, dimBlock2d_16>>>(dev_data, dev_cluster_info, dev_center_data, params.obj_dimension, params.obj_num);
-    /* count_cluster_num<<<dimGrid1d_16, dimBlock1d_16>>>(dev_cluster_info, dev_cluster_count, params.obj_dimension, params.obj_num); */
-    count_cluster_num<<<dimGrid1d_32, dimBlock1d_32>>>(dev_cluster_info, dev_cluster_count, params.obj_dimension, params.obj_num);
-    cal_center_mean<<<dimGrid2d_cluster, dimBlock2d_16>>>(dev_center_data, dev_cluster_count, params.obj_dimension, params.cluster_num);
+    cal_center_total<<<grid2d_dimension_obj, block2d_16>>>(dev_data, dev_cluster_info, dev_center_data, params.obj_dimension, params.obj_num);
+    /* count_cluster_num<<<grid1d_16, block1d_16>>>(dev_cluster_info, dev_cluster_count, params.obj_dimension, params.obj_num); */
+    count_cluster_num<<<grid1d_32, block1d_32>>>(dev_cluster_info, dev_cluster_count, params.obj_dimension, params.obj_num);
+    cal_center_mean<<<grid2d_cluster, block2d_16>>>(dev_center_data, dev_cluster_count, params.obj_dimension, params.cluster_num);
+    /* cal_distance<<<grid2d_cluster_obj, block2d_16>>>(dev_data, dev_center_data, dev_distance, params.obj_dimension, params.obj_num); */
+
+
     int *host_cluster_info;
     float *host_center_data;
     host_center_data = (float*)malloc(params.obj_num * params.obj_dimension * sizeof(float));

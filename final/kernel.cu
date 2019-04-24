@@ -30,4 +30,24 @@ __global__ void cal_center_mean(float *dev_center_data, int *dev_cluster_count, 
         dev_center_data[idx] /= (float)dev_cluster_count[row];
     }
 }
+__device__ float distance(float *dev_obj_data, float *dev_center_data, int dimension){
+    float distance = 0;
+    for (int i = 0; i < dimension; ++i) {
+        float tmp = dev_obj_data[i] - dev_center_data[i];
+        distance = distance + tmp * tmp;
+    }
+    return distance;
+}
+/*
+  without shared memory
+ */
+__global__ void cal_distance(float *dev_obj_data,float *dev_center_data, float *dev_disntance, int dimension, int obj_num){
+    int col = blockDim.x * blockIdx.x + threadIdx.x;
+    int row = blockDim.y * blockIdx.y + threadIdx.y;
+    if(row < obj_num && col < dimension){
+        int idx = col + row * dimension;
+        /* dev_disntance[idx] = distance(dev_obj_data); */
+    }
+}
+
 #endif
