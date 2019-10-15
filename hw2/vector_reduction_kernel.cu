@@ -80,7 +80,7 @@ __global__ void reduction_more(float *g_data, int n, float *result){
     int index = blockIdx.x * blockDim.x * 2 + threadIdx.x;
     __shared__ float partialSum[512];
     if(index < n)
-        partialSum[tid] = g_data[index] + g_data[index + blockDim.x]; // same problem
+        partialSum[tid] = g_data[index] + g_data[index + blockDim.x]; // same problem segfault pro
     __syncthreads();
     for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
         __syncthreads();
@@ -89,7 +89,6 @@ __global__ void reduction_more(float *g_data, int n, float *result){
     }
     if(tid == 0)
         result[blockIdx.x] = partialSum[0];
-
 }
 /* __global__ void  */
 #endif // #ifndef _SCAN_NAIVE_KERNEL_H_
